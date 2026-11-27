@@ -1,4 +1,4 @@
-[![CI](https://github.com/dannyhoang249-hub/Gamming-Video-editing/actions/workflows/ci.yml/badge.svg)](https://github.com/dannyhoang249-hub/Gamming-Video-editing/actions/workflows/ci.yml)
+[![CI](https://github.com/dannyhoang249-hub/Gaming-Video-editing/actions/workflows/ci.yml/badge.svg)](https://github.com/dannyhoang249-hub/Gaming-Video-editing/actions/workflows/ci.yml)
 
 # Shorts Factory
 
