@@ -12,7 +12,6 @@ from .ffmpeg import (
     cut_clip,
     frame_rate,
     loudness_per_second,
-    make_vertical,
 )
 from .models import Clip, PipelineConfig, Transcript, TranscriptSegment, Word
 from .selector import select_highlights
@@ -162,13 +161,11 @@ def run_pipeline(
     clip_files: list[Path] = []
     for clip in clips:
         path = config.output_dir / "clips" / f"{clip.id}.mp4"
-        cut_clip(config.input, clip, path)
+        cut_clip(config.input, clip, path, config.aspect_ratio, config.portrait_mode)
         clip_files.append(path)
 
-    assembled = config.output_dir / "assembled.mp4"
-    concat_clips(clip_files, assembled, config.music_path)
     vertical = config.output_dir / "public" / "vertical-source.mp4"
-    make_vertical(assembled, vertical, config.aspect_ratio, config.portrait_mode)
+    concat_clips(clip_files, vertical, config.music_path)
     manifest = write_render_manifest(
         config, clips, transcript, transcript_file, vertical, fps=frame_rate(vertical)
     )
@@ -191,7 +188,6 @@ def run_pipeline(
     return {
         "transcript": transcript_file,
         "clips": clips,
-        "assembled": assembled,
         "vertical_source": vertical,
         "manifest": manifest,
         "rendered": rendered,

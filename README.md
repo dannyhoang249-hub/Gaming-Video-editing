@@ -105,7 +105,7 @@ flowchart TD
     E --> G[Ranked, non-overlapping clips]
     F --> G
     P --> G
-    G --> H[Cut, join, add music, resize]
+    G --> H[Cut and resize, then join and add music]
     H --> I[Remap captions to the new timeline]
     I --> J[Remotion render]
 ```
@@ -124,10 +124,9 @@ flowchart TD
 out/
 ├── transcript.json              # not created when you pass --transcript
 ├── clips/clip-01.mp4 ...        # selected highlights
-├── concat.txt                   # FFmpeg join list
-├── assembled.mp4                # joined clips, with music
+├── clips/concat.txt             # FFmpeg join list
 ├── public/
-│   ├── vertical-source.mp4      # resized video (landscape too, despite the name)
+│   ├── vertical-source.mp4      # joined clips with music (landscape too, despite the name)
 │   └── logo.*                   # copy of a local logo
 ├── render-manifest.json         # input for Remotion
 └── short.mp4                    # final video, with --render
@@ -157,7 +156,7 @@ CI runs these checks on pushes to `main`, on pull requests and weekly. Dependabo
 - Highlights that are only visual, with no speech or loud audio, are not detected.
 - Loud music or alerts in the source can be mistaken for highlights.
 - Larger Whisper models need more memory and time; a GPU helps.
-- Video is re-encoded at several stages, which costs time and some quality.
+- Video is encoded twice (when cutting and when rendering), which costs some quality.
 
 ## Credits
 

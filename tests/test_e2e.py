@@ -8,8 +8,8 @@ from pathlib import Path
 
 import pytest
 
-from shorts_factory.ffmpeg import concat_clips, has_audio, loudness_per_second
-from shorts_factory.models import PipelineConfig
+from shorts_factory.ffmpeg import concat_clips, cut_clip, has_audio, loudness_per_second
+from shorts_factory.models import Clip, PipelineConfig
 from shorts_factory.pipeline import run_pipeline
 
 pytestmark = pytest.mark.skipif(os.getenv("E2E") != "1", reason="set E2E=1 to run")
@@ -67,6 +67,22 @@ def test_music_is_added_with_or_without_source_audio(tmp_path: Path, with_audio:
 
     assert has_audio(out)
     assert float(probe(out)["format"]["duration"]) == pytest.approx(4, abs=0.2)
+
+
+def test_cut_clips_are_resized_and_join_to_the_expected_length(tmp_path: Path):
+    source, out = tmp_path / "in.mp4", tmp_path / "public" / "out.mp4"
+    ffmpeg("-f", "lavfi", "-i", "testsrc=size=640x360:rate=30", "-f", "lavfi", "-i", "sine",
+           "-t", "12", str(source))
+    clips = [tmp_path / "clips" / f"{n}.mp4" for n in range(3)]
+    for number, path in enumerate(clips):
+        cut_clip(source, Clip(id=str(number), start=number * 4, end=number * 4 + 2), path)
+
+    concat_clips(clips, out)
+
+    info = probe(out)
+    video = next(stream for stream in info["streams"] if "width" in stream)
+    assert (video["width"], video["height"]) == (1920, 1080)
+    assert float(info["format"]["duration"]) == pytest.approx(6, abs=0.2)
 
 
 def mean_volume(path: Path) -> float:
