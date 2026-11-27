@@ -7,7 +7,6 @@ from typing import Any
 
 from .models import Clip, Transcript
 
-
 HOOK_WORDS = {
     "how", "why", "secret", "mistake", "truth", "never", "best", "worst",
     "first", "because", "imagine", "important", "problem", "solution",

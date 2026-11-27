@@ -2,8 +2,8 @@
   "name": "shorts-factory-remotion",
   "private": true,
   "scripts": {
-    "start": "remotion studio src/index.ts",
-    "render": "remotion render src/index.ts ShortVideo out/short.mp4"
+    "start": "remotion studio src/index.tsx",
+    "render": "remotion render src/index.tsx ShortVideo out/short.mp4"
   },
   "dependencies": {
     "@remotion/cli": "^4.0.0",
