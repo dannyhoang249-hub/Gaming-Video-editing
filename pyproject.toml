@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "shorts-factory"
 version = "0.1.0"
-description = "Automated long-form video to branded vertical shorts pipeline"
+description = "Automated pipeline that turns long gaming streams and videos into branded highlight videos"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
