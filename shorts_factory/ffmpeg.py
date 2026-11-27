@@ -26,6 +26,30 @@ def _run(args: Sequence[str]) -> None:
         raise FFmpegError(exc.stderr[-2000:]) from exc
 
 
+def loudness_per_second(source: Path) -> list[float]:
+    """RMS level in dB of each second of the first audio track (-inf when silent)."""
+    ffmpeg = require_ffmpeg()
+    try:
+        result = subprocess.run(
+            [
+                ffmpeg, "-v", "error", "-i", str(source), "-map", "0:a:0", "-vn",
+                "-af", (
+                    "aresample=8000,asetnsamples=8000,astats=metadata=1:reset=1,"
+                    "ametadata=print:key=lavfi.astats.Overall.RMS_level:file=-"
+                ),
+                "-f", "null", "-",
+            ],
+            check=True, capture_output=True, text=True,
+        )
+    except subprocess.CalledProcessError as exc:
+        raise FFmpegError(exc.stderr[-2000:]) from exc
+    return [
+        float(line.split("=", 1)[1])
+        for line in result.stdout.splitlines()
+        if line.startswith("lavfi.astats.Overall.RMS_level=")
+    ]
+
+
 def cut_clip(source: Path, clip: Clip, destination: Path) -> None:
     ffmpeg = require_ffmpeg()
     destination.parent.mkdir(parents=True, exist_ok=True)
@@ -71,6 +95,7 @@ def make_vertical(
     source: Path,
     destination: Path,
     aspect_ratio: str = "16:9",
+    portrait_mode: str = "crop",
 ) -> None:
     if aspect_ratio == "16:9":
         width, height = 1920, 1080
@@ -81,12 +106,18 @@ def make_vertical(
 
     ffmpeg = require_ffmpeg()
     destination.parent.mkdir(parents=True, exist_ok=True)
+    fill = f"scale={width}:{height}:force_original_aspect_ratio=increase,crop={width}:{height}"
+    if aspect_ratio == "9:16" and portrait_mode == "blur":
+        video_filter = (
+            f"split[bg][fg];[bg]{fill},boxblur=20:2[back];"
+            f"[fg]scale={width}:{height}:force_original_aspect_ratio=decrease:force_divisible_by=2[front];"
+            "[back][front]overlay=(W-w)/2:(H-h)/2,setsar=1"
+        )
+    else:
+        video_filter = f"{fill},setsar=1"
     _run([
         ffmpeg, "-y", "-i", str(source),
-        "-vf", (
-            f"scale={width}:{height}:force_original_aspect_ratio=increase,"
-            f"crop={width}:{height},setsar=1"
-        ),
+        "-vf", video_filter,
         "-c:v", "libx264", "-preset", "veryfast", "-crf", "20",
         "-c:a", "aac", "-movflags", "+faststart", str(destination),
     ])

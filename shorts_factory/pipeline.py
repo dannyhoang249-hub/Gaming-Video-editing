@@ -1,13 +1,17 @@
 from __future__ import annotations
 
 import json
+import shutil
 import subprocess
+import sys
 from pathlib import Path
 
-from .ffmpeg import concat_clips, cut_clip, make_vertical
+from .ffmpeg import FFmpegError, concat_clips, cut_clip, loudness_per_second, make_vertical
 from .models import Clip, PipelineConfig, Transcript, TranscriptSegment, Word
 from .selector import select_highlights
 from .transcriber import load_transcript, save_transcript, transcribe
+
+REMOTION_DIR = Path(__file__).resolve().parent.parent / "remotion"
 
 
 def _timeline_transcript(transcript: Transcript, clips: list[Clip]) -> Transcript:
@@ -50,6 +54,20 @@ def _timeline_transcript(transcript: Transcript, clips: list[Clip]) -> Transcrip
     )
 
 
+def _get_transcript(config: PipelineConfig, path: Path, user_supplied: bool) -> Transcript:
+    if user_supplied:
+        # Read only: never rewrite a file the user passed in.
+        return load_transcript(path)
+    if path.exists():
+        cached = load_transcript(path)
+        if Path(cached.source).resolve() == config.input.resolve():
+            return cached
+        print(f"warning: {path} belongs to {cached.source}, transcribing again", file=sys.stderr)
+    transcript = transcribe(config.input, config.model, config.language)
+    save_transcript(transcript, path)
+    return transcript
+
+
 def write_render_manifest(
     config: PipelineConfig,
     clips: list[Clip],
@@ -59,15 +77,22 @@ def write_render_manifest(
 ) -> Path:
     timeline_transcript = _timeline_transcript(transcript, clips)
     manifest = config.output_dir / "render-manifest.json"
+    # Remotion's browser can only load files from its public dir, so every asset
+    # lives next to the source video and is referenced by file name.
+    brand = config.brand.model_dump(mode="json")
+    logo = brand["logo_path"]
+    if logo and not logo.startswith(("http://", "https://")):
+        copied = source_video.parent / f"logo{Path(logo).suffix}"
+        shutil.copyfile(logo, copied)
+        brand["logo_path"] = copied.name
     manifest.write_text(
         json.dumps(
             {
-                "source": str(source_video.resolve()),
+                "source": source_video.name,
                 "transcript": str(transcript_path.resolve()),
                 "transcript_data": timeline_transcript.model_dump(mode="json"),
                 "clips": [clip.model_dump(mode="json") for clip in clips],
-                "brand": config.brand.model_dump(mode="json"),
-                "music": str(config.music_path.resolve()) if config.music_path else None,
+                "brand": brand,
                 "aspect_ratio": config.aspect_ratio,
             },
             ensure_ascii=False,
@@ -88,12 +113,13 @@ def run_pipeline(
     config.output_dir.mkdir(parents=True, exist_ok=True)
 
     transcript_file = transcript_path or config.output_dir / "transcript.json"
-    transcript = (
-        load_transcript(transcript_file)
-        if transcript_file.exists()
-        else transcribe(config.input, config.model, config.language)
-    )
-    save_transcript(transcript, transcript_file)
+    transcript = _get_transcript(config, transcript_file, user_supplied=transcript_path is not None)
+
+    try:
+        loudness = loudness_per_second(config.input)
+    except FFmpegError as exc:
+        print(f"warning: audio analysis failed, selecting from speech only: {exc}", file=sys.stderr)
+        loudness = []
 
     clips = select_highlights(
         transcript,
@@ -102,6 +128,7 @@ def run_pipeline(
         maximum=config.max_clip_seconds,
         padding=config.padding_seconds,
         ai_model=config.ai_model,
+        loudness=loudness,
     )
 
     clip_files: list[Path] = []
@@ -112,8 +139,8 @@ def run_pipeline(
 
     assembled = config.output_dir / "assembled.mp4"
     concat_clips(clip_files, assembled, config.music_path)
-    vertical = config.output_dir / "vertical-source.mp4"
-    make_vertical(assembled, vertical, config.aspect_ratio)
+    vertical = config.output_dir / "public" / "vertical-source.mp4"
+    make_vertical(assembled, vertical, config.aspect_ratio, config.portrait_mode)
     manifest = write_render_manifest(config, clips, transcript, transcript_file, vertical)
 
     rendered: Path | None = None
@@ -121,9 +148,12 @@ def run_pipeline(
         rendered = config.output_dir / "short.mp4"
         subprocess.run(
             [
-                "npx", "--prefix", "remotion", "remotion", "render", "remotion/src/index.tsx",
-                "ShortVideo", str(rendered), "--props", str(manifest),
+                "npx", "remotion", "render", "src/index.tsx", "ShortVideo",
+                str(rendered.resolve()),
+                f"--props={manifest.resolve()}",
+                f"--public-dir={vertical.parent.resolve()}",
             ],
+            cwd=REMOTION_DIR,
             check=True,
         )
 

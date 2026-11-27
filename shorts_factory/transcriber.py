@@ -48,7 +48,7 @@ def transcribe(
         )
 
     return Transcript(
-        source=str(source),
+        source=str(source.resolve()),
         language=str(result.get("language", language or "unknown")),
         duration=max((segment.end for segment in segments), default=0.0),
         segments=segments,
