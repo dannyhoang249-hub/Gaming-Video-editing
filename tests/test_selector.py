@@ -38,6 +38,16 @@ def test_selects_limited_non_overlapping_clips():
 def test_empty_transcript_returns_empty():
     assert select_highlights(Transcript(source="empty.mp4"), count=3) == []
 
+def test_heuristic_clips_skip_long_pauses_and_keep_the_minimum_length():
+    transcript = Transcript(source="s", duration=104, segments=[
+        TranscriptSegment(id=0, start=10, end=12, text="why?"),
+        TranscriptSegment(id=1, start=100, end=104, text="bye"),
+    ])
+    clips = select_highlights(transcript, count=2, minimum=12, maximum=55, padding=1.5)
+    # The first is not stretched across the pause; the last grows backwards.
+    assert [(clip.start, clip.end) for clip in clips] == [(8.5, 20.5), (92, 104)]
+
+
 def test_loud_moment_without_speech_is_selected():
     loudness = [-30.0] * 120
     loudness[100] = -10.0

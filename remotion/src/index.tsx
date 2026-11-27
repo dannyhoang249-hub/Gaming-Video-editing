@@ -15,6 +15,7 @@ export type RenderProps = {
     }>;
   };
   aspect_ratio?: "16:9" | "9:16";
+  fps?: number;
   clips: Array<{start: number; end: number; text: string}>;
   brand: {
     name: string;
@@ -49,9 +50,11 @@ const Root: React.FC = () => (
     }}
     calculateMetadata={({props}) => {
       const portrait = props.aspect_ratio === "9:16";
+      const fps = props.fps ?? 30;
       return {
+        fps,
         // Length of the assembled timeline, not of the original source video.
-        durationInFrames: Math.max(1, Math.ceil((props.transcript_data?.duration ?? 60) * 30)),
+        durationInFrames: Math.max(1, Math.ceil((props.transcript_data?.duration ?? 60) * fps)),
         width: portrait ? 1080 : 1920,
         height: portrait ? 1920 : 1080,
       };

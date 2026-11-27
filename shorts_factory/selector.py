@@ -28,6 +28,8 @@ PEAK_FLOOR = 0.003
 LLM_CHUNK_CHARS = 12_000
 # AI timestamps this close to a sentence boundary are moved onto it.
 SNAP_SECONDS = 3.0
+# The heuristic joins the next sentence only if the pause before it is at most this long.
+MAX_GAP_SECONDS = 5.0
 
 
 def _heuristic_candidates(
@@ -43,10 +45,19 @@ def _heuristic_candidates(
         if not text:
             continue
         start = max(0.0, segment.start - padding)
-        end = min(transcript.duration or segment.end + padding, segment.end + padding)
-        while end - start < minimum and (index + 1 < len(segments)):
+        limit = transcript.duration or segment.end + padding
+        end = min(limit, segment.end + padding)
+        while (
+            end - start < minimum
+            and index + 1 < len(segments)
+            and segments[index + 1].start - segments[index].end <= MAX_GAP_SECONDS
+        ):
             index += 1
-            end = min(transcript.duration or segments[index].end, segments[index].end + padding)
+            end = min(transcript.duration or segments[index].end + padding, segments[index].end + padding)
+        if end - start < minimum:
+            # Not enough nearby speech: widen the window, backwards at the end of the video.
+            end = min(transcript.duration or start + minimum, start + minimum)
+            start = max(0.0, end - minimum)
         end = min(end, start + maximum)
         words = re.findall(r"\w+", unicodedata.normalize("NFC", text.lower()))
         # Match whole words and multi-word phrases such as "bí mật".

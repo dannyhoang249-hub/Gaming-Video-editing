@@ -13,6 +13,7 @@ Output is `1920×1080` (16:9) by default, or `1080×1920` (9:16) for Shorts, Tik
 - Local transcription with Whisper, with word-level timestamps
 - Highlight selection by an OpenAI model, or by a local heuristic without an API key
 - Detection of sudden loud moments (shouts, explosions), even when nobody is speaking
+- Keeps the source frame rate, up to 60 fps
 - Cutting, joining, background music and aspect-ratio conversion with FFmpeg
 - Captions of up to five words at a time, highlighting the spoken word
 - Brand name, logo, accent color and progress bar, rendered with Remotion
@@ -113,7 +114,7 @@ flowchart TD
 
 **AI selection.** Long transcripts are sent in several requests, and one failed request does not discard the others. Each returned clip is validated, moved to nearby sentence boundaries and kept within the length limits. If AI selection yields nothing usable, the heuristic takes over.
 
-**Heuristic selection.** Scores sentences by hook words (English and Vietnamese), questions and exclamations, and speech density.
+**Heuristic selection.** Scores sentences by hook words (English and Vietnamese), questions and exclamations, and speech density. A short sentence is joined with the next ones only across pauses of up to 5 seconds.
 
 **Audio peaks.** Two seconds at least 1.8 times louder than the median of the previous 16 seconds become a clip candidate of `min_clip_seconds`, mostly lead-up. The first 16 seconds never produce a peak. The `reason` field in `render-manifest.json` shows why each clip was picked.
 

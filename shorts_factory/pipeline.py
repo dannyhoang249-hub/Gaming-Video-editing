@@ -6,7 +6,14 @@ import subprocess
 import sys
 from pathlib import Path
 
-from .ffmpeg import FFmpegError, concat_clips, cut_clip, loudness_per_second, make_vertical
+from .ffmpeg import (
+    FFmpegError,
+    concat_clips,
+    cut_clip,
+    frame_rate,
+    loudness_per_second,
+    make_vertical,
+)
 from .models import Clip, PipelineConfig, Transcript, TranscriptSegment, Word
 from .selector import select_highlights
 from .transcriber import load_transcript, save_transcript, transcribe
@@ -77,6 +84,7 @@ def write_render_manifest(
     transcript: Transcript,
     transcript_path: Path,
     source_video: Path,
+    fps: float = 30.0,
 ) -> Path:
     timeline_transcript = _timeline_transcript(transcript, clips)
     manifest = config.output_dir / "render-manifest.json"
@@ -97,6 +105,7 @@ def write_render_manifest(
                 "clips": [clip.model_dump(mode="json") for clip in clips],
                 "brand": brand,
                 "aspect_ratio": config.aspect_ratio,
+                "fps": fps,
             },
             ensure_ascii=False,
             indent=2,
@@ -160,7 +169,9 @@ def run_pipeline(
     concat_clips(clip_files, assembled, config.music_path)
     vertical = config.output_dir / "public" / "vertical-source.mp4"
     make_vertical(assembled, vertical, config.aspect_ratio, config.portrait_mode)
-    manifest = write_render_manifest(config, clips, transcript, transcript_file, vertical)
+    manifest = write_render_manifest(
+        config, clips, transcript, transcript_file, vertical, fps=frame_rate(vertical)
+    )
 
     rendered: Path | None = None
     if render:

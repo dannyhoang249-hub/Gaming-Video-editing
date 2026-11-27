@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import shutil
 import subprocess
+from fractions import Fraction
 from pathlib import Path
 from typing import Sequence
 
@@ -62,6 +63,25 @@ def has_audio(source: Path) -> bool:
     except subprocess.CalledProcessError as exc:
         raise FFmpegError(exc.stderr[-2000:]) from exc
     return bool(result.stdout.strip())
+
+
+def frame_rate(source: Path) -> float:
+    """Average frames per second, capped at 60; 30 when the file does not say."""
+    try:
+        result = subprocess.run(
+            [
+                "ffprobe", "-v", "error", "-select_streams", "v:0",
+                "-show_entries", "stream=avg_frame_rate", "-of", "csv=p=0", str(source),
+            ],
+            check=True, capture_output=True, text=True,
+        )
+    except subprocess.CalledProcessError as exc:
+        raise FFmpegError(exc.stderr[-2000:]) from exc
+    try:
+        fps = float(Fraction(result.stdout.strip().rstrip(",")))
+    except (ValueError, ZeroDivisionError):
+        return 30.0
+    return round(min(fps, 60.0), 3) if fps > 0 else 30.0
 
 
 def cut_clip(source: Path, clip: Clip, destination: Path) -> None:

@@ -21,7 +21,7 @@ def ffmpeg(*args: str) -> None:
 
 def probe(path: Path) -> dict:
     output = subprocess.check_output([
-        "ffprobe", "-v", "error", "-show_entries", "format=duration:stream=width,height",
+        "ffprobe", "-v", "error", "-show_entries", "format=duration:stream=width,height,r_frame_rate",
         "-of", "json", str(path),
     ])
     return json.loads(output)
@@ -31,7 +31,7 @@ def test_render_matches_timeline(tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
     # Relative paths, as a user would type them.
     monkeypatch.chdir(tmp_path)
-    ffmpeg("-f", "lavfi", "-i", "testsrc=size=640x360:rate=30", "-f", "lavfi", "-i", "sine",
+    ffmpeg("-f", "lavfi", "-i", "testsrc=size=640x360:rate=60", "-f", "lavfi", "-i", "sine",
            "-t", "20", "-c:v", "libx264", "-c:a", "aac", "in.mp4")
     ffmpeg("-f", "lavfi", "-i", "color=red:size=64x64", "-frames:v", "1", "logo.png")
     ffmpeg("-f", "lavfi", "-i", "sine=frequency=220", "-t", "2", "music.wav")
@@ -52,6 +52,7 @@ def test_render_matches_timeline(tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     assert float(info["format"]["duration"]) == pytest.approx(3, abs=0.2)
     video = next(stream for stream in info["streams"] if "width" in stream)
     assert (video["width"], video["height"]) == (1080, 1920)
+    assert video["r_frame_rate"] == "60/1"
 
 
 @pytest.mark.parametrize("with_audio", [True, False])
