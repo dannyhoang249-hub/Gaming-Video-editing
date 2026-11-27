@@ -2,12 +2,12 @@
   "name": "shorts-factory-remotion",
   "private": true,
   "scripts": {
+    "test": "node --test test/captions.test.mjs",
     "start": "remotion studio src/index.tsx",
     "render": "remotion render src/index.tsx ShortVideo out/short.mp4"
   },
   "dependencies": {
     "@remotion/cli": "^4.0.546",
-    "@remotion/media": "^4.0.0",
     "remotion": "^4.0.546"
   },
   "devDependencies": {

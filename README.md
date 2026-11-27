@@ -146,6 +146,7 @@ E2E=1 python3 -m pytest -q tests/test_e2e.py           # real FFmpeg and Remotio
 pip install ruff
 ruff check --isolated --select E,F,I --line-length 120 .
 npx --prefix remotion tsc --noEmit -p remotion/tsconfig.json
+npm test --prefix remotion                             # caption tests, Node.js 22.18+
 npm run start --prefix remotion                        # Remotion Studio
 ```
 
@@ -155,6 +156,7 @@ CI runs these checks on pushes to `main`, on pull requests and weekly. Dependabo
 
 - Highlights that are only visual, with no speech or loud audio, are not detected.
 - Loud music or alerts in the source can be mistaken for highlights.
+- Transcripts without word timings show the whole sentence as one caption.
 - Larger Whisper models need more memory and time; a GPU helps.
 - Video is encoded twice (when cutting and when rendering), which costs some quality.
 

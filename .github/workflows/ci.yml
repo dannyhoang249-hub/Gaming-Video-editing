@@ -34,11 +34,13 @@ jobs:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
         with:
-          node-version: 20
+          # 22.18 or newer runs the TypeScript that the tests import.
+          node-version: 22
           cache: npm
           cache-dependency-path: remotion/package-lock.json
       - run: npm ci
       - run: npx tsc --noEmit
+      - run: npm test
 
   e2e:
     runs-on: ubuntu-latest
