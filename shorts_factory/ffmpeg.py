@@ -50,6 +50,20 @@ def loudness_per_second(source: Path) -> list[float]:
     ]
 
 
+def has_audio(source: Path) -> bool:
+    try:
+        result = subprocess.run(
+            [
+                "ffprobe", "-v", "error", "-select_streams", "a",
+                "-show_entries", "stream=index", "-of", "csv=p=0", str(source),
+            ],
+            check=True, capture_output=True, text=True,
+        )
+    except subprocess.CalledProcessError as exc:
+        raise FFmpegError(exc.stderr[-2000:]) from exc
+    return bool(result.stdout.strip())
+
+
 def cut_clip(source: Path, clip: Clip, destination: Path) -> None:
     ffmpeg = require_ffmpeg()
     destination.parent.mkdir(parents=True, exist_ok=True)
@@ -75,12 +89,18 @@ def concat_clips(clips: Sequence[Path], destination: Path, music: Path | None = 
         lines.append(f"file '{escaped_path}'\n")
     manifest.write_text("".join(lines), encoding="utf-8")
     if music:
+        # With no source audio there is nothing to mix, so the music is the soundtrack.
+        mix = (
+            "[1:a]volume=0.12[a1];"
+            # normalize=0 keeps the source at full volume; amix would otherwise halve it.
+            "[0:a][a1]amix=inputs=2:duration=first:normalize=0[aout]"
+            if has_audio(clips[0])
+            else "[1:a]anull[aout]"
+        )
         _run([
             ffmpeg, "-y", "-f", "concat", "-safe", "0", "-i", str(manifest),
             "-stream_loop", "-1", "-i", str(music),
-            "-filter_complex",
-            "[0:a]volume=1.0[a0];[1:a]volume=0.12,aloop=loop=-1:size=2e+09[a1];"
-            "[a0][a1]amix=inputs=2:duration=first:dropout_transition=2[aout]",
+            "-filter_complex", mix,
             "-map", "0:v:0", "-map", "[aout]", "-c:v", "libx264", "-c:a", "aac",
             "-shortest", "-movflags", "+faststart", str(destination),
         ])

@@ -11,6 +11,9 @@ import {
 } from "remotion";
 import type {RenderProps} from "./index";
 
+// Words shown on screen at once, so long sentences do not cover the video.
+const WORDS_PER_CAPTION = 5;
+
 const asset = (path: string) => (/^https?:\/\//.test(path) ? path : staticFile(path));
 
 export const ShortVideo: React.FC<RenderProps> = (props) => {
@@ -21,7 +24,11 @@ export const ShortVideo: React.FC<RenderProps> = (props) => {
   const current = props.transcript_data?.segments.find(
     (segment) => time >= segment.start && time <= segment.end,
   );
-  const words = current?.words ?? [];
+  const allWords = current?.words ?? [];
+  // The last word that has started, so the caption holds during pauses between words.
+  const spoken = Math.max(0, allWords.filter((word) => word.start <= time).length - 1);
+  const first = spoken - (spoken % WORDS_PER_CAPTION);
+  const words = allWords.slice(first, first + WORDS_PER_CAPTION);
   const activeWord = words.findIndex(
     (word) => time >= word.start && time <= word.end,
   );
