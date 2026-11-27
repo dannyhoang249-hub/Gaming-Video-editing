@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import shutil
 import subprocess
+from fractions import Fraction
 from pathlib import Path
 from typing import Sequence
 
@@ -50,12 +51,89 @@ def loudness_per_second(source: Path) -> list[float]:
     ]
 
 
-def cut_clip(source: Path, clip: Clip, destination: Path) -> None:
+def has_audio(source: Path) -> bool:
+    try:
+        result = subprocess.run(
+            [
+                "ffprobe", "-v", "error", "-select_streams", "a",
+                "-show_entries", "stream=index", "-of", "csv=p=0", str(source),
+            ],
+            check=True, capture_output=True, text=True,
+        )
+    except subprocess.CalledProcessError as exc:
+        raise FFmpegError(exc.stderr[-2000:]) from exc
+    return bool(result.stdout.strip())
+
+
+def media_duration(source: Path) -> float:
+    """Length of a media file in seconds."""
+    try:
+        result = subprocess.run(
+            [
+                "ffprobe", "-v", "error", "-show_entries", "format=duration",
+                "-of", "csv=p=0", str(source),
+            ],
+            check=True, capture_output=True, text=True,
+        )
+        return float(result.stdout.strip())
+    except subprocess.CalledProcessError as exc:
+        raise FFmpegError(exc.stderr[-2000:]) from exc
+    except ValueError as exc:
+        raise FFmpegError(f"Cannot read the duration of {source}") from exc
+
+
+def frame_rate(source: Path) -> float:
+    """Average frames per second, capped at 60; 30 when the file does not say."""
+    try:
+        result = subprocess.run(
+            [
+                "ffprobe", "-v", "error", "-select_streams", "v:0",
+                "-show_entries", "stream=avg_frame_rate", "-of", "csv=p=0", str(source),
+            ],
+            check=True, capture_output=True, text=True,
+        )
+    except subprocess.CalledProcessError as exc:
+        raise FFmpegError(exc.stderr[-2000:]) from exc
+    try:
+        fps = float(Fraction(result.stdout.strip().rstrip(",")))
+    except (ValueError, ZeroDivisionError):
+        return 30.0
+    return round(min(fps, 60.0), 3) if fps > 0 else 30.0
+
+
+def resize_filter(aspect_ratio: str = "16:9", portrait_mode: str = "crop") -> str:
+    """FFmpeg video filter that brings a frame to the output size."""
+    if aspect_ratio == "16:9":
+        width, height = 1920, 1080
+    elif aspect_ratio == "9:16":
+        width, height = 1080, 1920
+    else:
+        raise ValueError(f"Unsupported aspect ratio: {aspect_ratio}")
+
+    fill = f"scale={width}:{height}:force_original_aspect_ratio=increase,crop={width}:{height}"
+    if aspect_ratio == "9:16" and portrait_mode == "blur":
+        return (
+            f"split[bg][fg];[bg]{fill},boxblur=20:2[back];"
+            f"[fg]scale={width}:{height}:force_original_aspect_ratio=decrease:force_divisible_by=2[front];"
+            "[back][front]overlay=(W-w)/2:(H-h)/2,setsar=1"
+        )
+    return f"{fill},setsar=1"
+
+
+def cut_clip(
+    source: Path,
+    clip: Clip,
+    destination: Path,
+    aspect_ratio: str = "16:9",
+    portrait_mode: str = "crop",
+) -> None:
+    """Cut one clip and resize it, so the video is not encoded again before rendering."""
     ffmpeg = require_ffmpeg()
     destination.parent.mkdir(parents=True, exist_ok=True)
     _run([
         ffmpeg, "-y", "-ss", str(clip.start), "-i", str(source),
         "-t", str(clip.duration), "-map", "0:v:0", "-map", "0:a:0?",
+        "-vf", resize_filter(aspect_ratio, portrait_mode),
         "-c:v", "libx264", "-preset", "veryfast", "-crf", "20",
         "-c:a", "aac", "-movflags", "+faststart", str(destination),
     ])
@@ -67,7 +145,7 @@ def concat_clips(clips: Sequence[Path], destination: Path, music: Path | None = 
 
     ffmpeg = require_ffmpeg()
     destination.parent.mkdir(parents=True, exist_ok=True)
-    manifest = destination.parent / "concat.txt"
+    manifest = clips[0].parent / "concat.txt"
 
     lines = []
     for clip in clips:
@@ -75,49 +153,23 @@ def concat_clips(clips: Sequence[Path], destination: Path, music: Path | None = 
         lines.append(f"file '{escaped_path}'\n")
     manifest.write_text("".join(lines), encoding="utf-8")
     if music:
+        # With no source audio there is nothing to mix, so the music is the soundtrack.
+        mix = (
+            "[1:a]volume=0.12[a1];"
+            # normalize=0 keeps the source at full volume; amix would otherwise halve it.
+            "[0:a][a1]amix=inputs=2:duration=first:normalize=0[aout]"
+            if has_audio(clips[0])
+            else "[1:a]anull[aout]"
+        )
         _run([
             ffmpeg, "-y", "-f", "concat", "-safe", "0", "-i", str(manifest),
             "-stream_loop", "-1", "-i", str(music),
-            "-filter_complex",
-            "[0:a]volume=1.0[a0];[1:a]volume=0.12,aloop=loop=-1:size=2e+09[a1];"
-            "[a0][a1]amix=inputs=2:duration=first:dropout_transition=2[aout]",
-            "-map", "0:v:0", "-map", "[aout]", "-c:v", "libx264", "-c:a", "aac",
+            "-filter_complex", mix,
+            "-map", "0:v:0", "-map", "[aout]", "-c:v", "copy", "-c:a", "aac",
             "-shortest", "-movflags", "+faststart", str(destination),
         ])
     else:
         _run([
             ffmpeg, "-y", "-f", "concat", "-safe", "0", "-i", str(manifest),
-            "-c:v", "libx264", "-c:a", "aac", "-movflags", "+faststart", str(destination),
+            "-c:v", "copy", "-c:a", "aac", "-movflags", "+faststart", str(destination),
         ])
-
-
-def make_vertical(
-    source: Path,
-    destination: Path,
-    aspect_ratio: str = "16:9",
-    portrait_mode: str = "crop",
-) -> None:
-    if aspect_ratio == "16:9":
-        width, height = 1920, 1080
-    elif aspect_ratio == "9:16":
-        width, height = 1080, 1920
-    else:
-        raise ValueError(f"Unsupported aspect ratio: {aspect_ratio}")
-
-    ffmpeg = require_ffmpeg()
-    destination.parent.mkdir(parents=True, exist_ok=True)
-    fill = f"scale={width}:{height}:force_original_aspect_ratio=increase,crop={width}:{height}"
-    if aspect_ratio == "9:16" and portrait_mode == "blur":
-        video_filter = (
-            f"split[bg][fg];[bg]{fill},boxblur=20:2[back];"
-            f"[fg]scale={width}:{height}:force_original_aspect_ratio=decrease:force_divisible_by=2[front];"
-            "[back][front]overlay=(W-w)/2:(H-h)/2,setsar=1"
-        )
-    else:
-        video_filter = f"{fill},setsar=1"
-    _run([
-        ffmpeg, "-y", "-i", str(source),
-        "-vf", video_filter,
-        "-c:v", "libx264", "-preset", "veryfast", "-crf", "20",
-        "-c:a", "aac", "-movflags", "+faststart", str(destination),
-    ])

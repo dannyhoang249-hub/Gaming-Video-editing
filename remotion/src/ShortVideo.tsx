@@ -9,6 +9,7 @@ import {
   useCurrentFrame,
   useVideoConfig,
 } from "remotion";
+import {captionWords} from "./captions";
 import type {RenderProps} from "./index";
 
 const asset = (path: string) => (/^https?:\/\//.test(path) ? path : staticFile(path));
@@ -21,7 +22,7 @@ export const ShortVideo: React.FC<RenderProps> = (props) => {
   const current = props.transcript_data?.segments.find(
     (segment) => time >= segment.start && time <= segment.end,
   );
-  const words = current?.words ?? [];
+  const words = captionWords(current?.words ?? [], time);
   const activeWord = words.findIndex(
     (word) => time >= word.start && time <= word.end,
   );

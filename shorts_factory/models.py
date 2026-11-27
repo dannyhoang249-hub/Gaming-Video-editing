@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 class Word(BaseModel):
@@ -42,6 +42,9 @@ class Clip(BaseModel):
 
 
 class BrandConfig(BaseModel):
+    # Reject unknown keys, so a typo is an error instead of a silently ignored option.
+    model_config = ConfigDict(extra="forbid")
+
     name: str = "Your Brand"
     accent: str = "#7C3AED"
     text_color: str = "#FFFFFF"
@@ -51,6 +54,8 @@ class BrandConfig(BaseModel):
 
 
 class PipelineConfig(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     input: Path
     output_dir: Path = Path("out")
     model: str = "base"
@@ -65,3 +70,9 @@ class PipelineConfig(BaseModel):
     brand: BrandConfig = Field(default_factory=BrandConfig)
     music_path: Path | None = None
     ai_model: str = "gpt-4o-mini"
+
+    @model_validator(mode="after")
+    def _check_clip_lengths(self) -> PipelineConfig:
+        if self.min_clip_seconds > self.max_clip_seconds:
+            raise ValueError("min_clip_seconds must not be greater than max_clip_seconds")
+        return self
