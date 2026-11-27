@@ -1,3 +1,7 @@
+[![CI](https://github.com/dannyhoang249-hub/Gamming-Video-editing/actions/workflows/ci.yml/badge.svg)](https://github.com/dannyhoang249-hub/Gamming-Video-editing/actions/workflows/ci.yml)
+
+> **Status: alpha.** The pipeline runs end to end, but the API and config may change.
+
 this repo is an automated video editing pipeline for turning long gaming livestreams, gameplay recordings, podcasts, interviews, and webinars into polished highlight videos.
 
 The project is **landscape-first** and outputs `1920×1080` videos by default, making it suitable for:
@@ -203,7 +207,9 @@ Remotion renders the final composition with:
 │       └── ShortVideo.tsx # Video layout, subtitles, and branding
 │
 └── tests/
-    └── test_selector.py   # Highlight selection tests
+    ├── test_selector.py   # Highlight selection tests
+    ├── test_pipeline.py   # Timeline remapping, manifest, config validation
+    └── test_cli.py        # Config file + CLI flag merging
 ```
 
 ---
@@ -530,6 +536,19 @@ Start Remotion Studio:
 
 ```bash
 npm run start --prefix remotion
+```
+
+### Continuous integration
+
+GitHub Actions (`.github/workflows/ci.yml`) runs `ruff` and `pytest` plus the Remotion
+TypeScript check on every push, pull request, and weekly on a schedule. CI does not install
+`openai-whisper`, since the tests never import it. Dependabot (`.github/dependabot.yml`)
+opens weekly update PRs for pip and npm dependencies.
+
+Lint locally the same way CI does:
+
+```bash
+ruff check --isolated --select E,F,I --line-length 120 .
 ```
 
 ---
