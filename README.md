@@ -25,7 +25,7 @@ Shorts Factory automates the repetitive parts of editing a long video:
 1. Transcribes speech with Whisper.
 2. Detects timestamps for sentences and individual words.
 3. Selects engaging moments with AI.
-4. Uses a local heuristic fallback when no AI API key is available.
+4. Uses a local heuristic fallback when no AI API key is available, and also picks loud moments from the audio track.
 5. Cuts and joins clips with FFmpeg.
 6. Converts the result to the configured aspect ratio.
 7. Adds animated word-by-word subtitles.
@@ -52,6 +52,8 @@ flowchart TD
 
     E --> G[Ranked highlight clips]
     F --> G
+    A --> P[FFmpeg loudness peaks]
+    P --> G
 
     G --> H[FFmpeg cuts source video]
     H --> I[FFmpeg concatenates selected clips]
@@ -105,7 +107,7 @@ The transcript is saved to:
 out/transcript.json
 ```
 
-The cache allows you to rerun clip selection or rendering without transcribing the source video again.
+The cache allows you to rerun clip selection or rendering without transcribing the source video again. It is reused only for the same source video; delete it after changing `model` or `language`. A file passed with `--transcript` is read and never rewritten.
 
 #### 2. Highlight selection
 
@@ -137,7 +139,17 @@ The fallback considers:
 
 This means the pipeline can still run locally without an external AI service.
 
-> Note: transcript-based selection works best for moments with spoken commentary. Purely visual moments with no speech may require additional scene or audio analysis in a future extension.
+> Note: loud moments are caught by the audio peaks described below. Moments that are visual only would need scene analysis, which is not implemented.
+
+#### Audio peaks
+
+FFmpeg measures the loudness of every second of the source. When two seconds are at least 1.8 times louder than the median of the 16 seconds before them (a shout, an explosion), they become a clip candidate, even when nobody is speaking. The clip is `min_clip_seconds` long, mostly lead-up. Peak candidates compete with the AI or heuristic candidates on score, and `reason` in `render-manifest.json` shows why each clip was picked. The first 16 seconds of a video never produce a peak.
+
+#### Checks on AI selection
+
+Long transcripts are sent in several requests, and a failed request is reported without discarding the others. Each returned clip is validated, moved onto nearby sentence boundaries, and kept within the configured clip length.
+
+The peak formula is adapted from [AutoClip](https://github.com/zhouxiaoka/autoclip); see `NOTICE`.
 
 #### 4. FFmpeg editing
 
@@ -209,6 +221,7 @@ Remotion renders the final composition with:
 └── tests/
     ├── test_selector.py   # Highlight selection tests
     ├── test_pipeline.py   # Timeline remapping, manifest, config validation
+    ├── test_e2e.py        # Real FFmpeg + Remotion run (E2E=1)
     └── test_cli.py        # Config file + CLI flag merging
 ```
 
@@ -367,6 +380,7 @@ music_path: null
 | `brand.font_family` | Font family used by the Remotion composition |
 | `brand.logo_path` | Optional logo path |
 | `brand.watermark` | Enables or disables the brand watermark |
+| `portrait_mode` | For `9:16`: `crop` the centre, or `blur` to show the whole frame over a blurred copy |
 | `music_path` | Optional background music file |
 
 ### Aspect ratios
@@ -492,7 +506,8 @@ out/
 │   ├── clip-02.mp4
 │   └── clip-03.mp4
 ├── assembled.mp4
-├── vertical-source.mp4
+├── public/
+│   └── vertical-source.mp4
 ├── render-manifest.json
 └── short.mp4
 ```
@@ -504,7 +519,7 @@ File descriptions:
 | `transcript.json` | Whisper transcript with timestamps |
 | `clips/clip-*.mp4` | Individual selected highlights |
 | `assembled.mp4` | Selected clips concatenated together |
-| `vertical-source.mp4` | Aspect-ratio-normalized source for rendering |
+| `public/vertical-source.mp4` | Aspect-ratio-normalized source for rendering (the logo is copied here too) |
 | `render-manifest.json` | Manifest passed to Remotion |
 | `short.mp4` | Final branded highlight video |
 
@@ -538,10 +553,16 @@ Start Remotion Studio:
 npm run start --prefix remotion
 ```
 
+Run the end-to-end render test (needs FFmpeg and the Remotion dependencies):
+
+```bash
+E2E=1 python3 -m pytest -q tests/test_e2e.py
+```
+
 ### Continuous integration
 
 GitHub Actions (`.github/workflows/ci.yml`) runs `ruff` and `pytest` plus the Remotion
-TypeScript check on every push, pull request, and weekly on a schedule. CI does not install
+TypeScript check, and an end-to-end render, on every push, pull request, and weekly on a schedule. CI does not install
 `openai-whisper`, since the tests never import it. Dependabot (`.github/dependabot.yml`)
 opens weekly update PRs for pip and npm dependencies.
 
@@ -556,14 +577,16 @@ ruff check --isolated --select E,F,I --line-length 120 .
 ## Limitations
 
 - Transcript-based selection is strongest for spoken commentary.
-- Silent visual highlights may not be detected without additional scene-analysis logic.
+- Highlights that are visual only, with no speech and no loud audio, are not detected.
+- Loud music or alerts in the source can be mistaken for highlights.
 - The first Whisper run may download a large model.
 - Larger Whisper models require more memory and processing time.
 - FFmpeg is required for all media editing stages.
 - No source video is included in the repository.
 - AI selection only runs when `OPENAI_API_KEY` is configured.
 - If AI selection fails, the pipeline falls back to local heuristic scoring.
-- Logo paths must be accessible to the Remotion rendering environment.
+- `logo_path` is a local file or an `http(s)` URL.
+- Rendering uses the `remotion/` folder of this checkout, so install with `pip install -e`.
 
 ---
 

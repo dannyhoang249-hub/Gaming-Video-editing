@@ -4,9 +4,11 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError
 
+from shorts_factory import pipeline
 from shorts_factory.ffmpeg import FFmpegError, concat_clips
 from shorts_factory.models import Clip, PipelineConfig, Transcript, TranscriptSegment, Word
-from shorts_factory.pipeline import _timeline_transcript, write_render_manifest
+from shorts_factory.pipeline import _get_transcript, _timeline_transcript, write_render_manifest
+from shorts_factory.transcriber import save_transcript
 
 
 def make_transcript() -> Transcript:
@@ -50,7 +52,7 @@ def test_manifest_written(tmp_path: Path):
     path = write_render_manifest(config, clips, make_transcript(), tmp_path / "t.json", tmp_path / "v.mp4")
     data = json.loads(path.read_text(encoding="utf-8"))
     assert data["aspect_ratio"] == "16:9"
-    assert data["music"] is None
+    assert data["source"] == "v.mp4"
     assert data["transcript_data"]["duration"] == 10
 
 
@@ -64,3 +66,24 @@ def test_config_validation():
 def test_concat_without_clips_raises(tmp_path: Path):
     with pytest.raises(FFmpegError):
         concat_clips([], tmp_path / "out.mp4")
+
+
+def test_cached_transcript_is_only_reused_for_the_same_video(tmp_path: Path, monkeypatch):
+    cache = tmp_path / "transcript.json"
+    save_transcript(Transcript(source=str(tmp_path / "old.mp4")), cache)
+    monkeypatch.setattr(pipeline, "transcribe", lambda source, *_: Transcript(source=str(source)))
+
+    same = PipelineConfig(input=tmp_path / "old.mp4")
+    other = PipelineConfig(input=tmp_path / "new.mp4")
+    # A transcript passed with --transcript is trusted and left untouched.
+    before = cache.read_text()
+    assert _get_transcript(other, cache, user_supplied=True).source.endswith("old.mp4")
+    assert cache.read_text() == before
+    assert _get_transcript(same, cache, user_supplied=False).source.endswith("old.mp4")
+    assert _get_transcript(other, cache, user_supplied=False).source.endswith("new.mp4")
+    assert "new.mp4" in cache.read_text()
+
+
+def test_missing_user_transcript_is_an_error(tmp_path: Path):
+    with pytest.raises(FileNotFoundError):
+        _get_transcript(PipelineConfig(input="a.mp4"), tmp_path / "nope.json", user_supplied=True)

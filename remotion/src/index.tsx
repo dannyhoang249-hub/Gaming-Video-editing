@@ -6,6 +6,7 @@ export type RenderProps = {
   source: string;
   transcript: string;
   transcript_data?: {
+    duration: number;
     segments: Array<{
       start: number;
       end: number;
@@ -13,7 +14,6 @@ export type RenderProps = {
       words?: Array<{word: string; start: number; end: number}>;
     }>;
   };
-  music?: string | null;
   aspect_ratio?: "16:9" | "9:16";
   clips: Array<{start: number; end: number; text: string}>;
   brand: {
@@ -47,12 +47,15 @@ const Root: React.FC = () => (
         watermark: true,
       },
     }}
-    calculateMetadata={({props}) => ({
-      durationInFrames: Math.max(
-        1,
-        Math.ceil((props.clips.at(-1)?.end ?? 60) * 30),
-      ),
-    })}
+    calculateMetadata={({props}) => {
+      const portrait = props.aspect_ratio === "9:16";
+      return {
+        // Length of the assembled timeline, not of the original source video.
+        durationInFrames: Math.max(1, Math.ceil((props.transcript_data?.duration ?? 60) * 30)),
+        width: portrait ? 1080 : 1920,
+        height: portrait ? 1920 : 1080,
+      };
+    }}
   />
 );
 

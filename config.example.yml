@@ -7,6 +7,8 @@ min_clip_seconds: 12
 max_clip_seconds: 55
 padding_seconds: 1.5
 aspect_ratio: "16:9"
+# For 9:16 only: "crop" the centre, or "blur" to keep the whole frame and HUD
+portrait_mode: crop
 ai_model: gpt-4o-mini
 brand:
   name: "Your Brand"

@@ -54,3 +54,7 @@ def main(argv: list[str] | None = None) -> None:
     config = build_config(args, load_config_file(args.config))
     result = run_pipeline(config, transcript_path=args.transcript, render=args.render)
     print(json.dumps({key: str(value) for key, value in result.items() if key != "clips"}, indent=2))
+
+
+if __name__ == "__main__":
+    main()

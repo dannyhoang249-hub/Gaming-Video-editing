@@ -60,6 +60,8 @@ class PipelineConfig(BaseModel):
     max_clip_seconds: float = Field(default=55.0, gt=0)
     padding_seconds: float = Field(default=1.5, ge=0)
     aspect_ratio: Literal["16:9", "9:16"] = "16:9"
+    # How a landscape source fills 9:16: crop the centre, or show it whole over a blurred copy.
+    portrait_mode: Literal["crop", "blur"] = "crop"
     brand: BrandConfig = Field(default_factory=BrandConfig)
     music_path: Path | None = None
     ai_model: str = "gpt-4o-mini"

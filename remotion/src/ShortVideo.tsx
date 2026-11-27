@@ -1,29 +1,21 @@
 import React from "react";
 import {
   AbsoluteFill,
-  Audio,
+  Img,
   interpolate,
+  OffthreadVideo,
   spring,
+  staticFile,
   useCurrentFrame,
   useVideoConfig,
-  Video,
 } from "remotion";
 import type {RenderProps} from "./index";
 
-type Segment = {
-  start: number;
-  end: number;
-  text: string;
-  words?: Array<{word: string; start: number; end: number}>;
-};
+const asset = (path: string) => (/^https?:\/\//.test(path) ? path : staticFile(path));
 
-type Props = RenderProps & {
-  transcript_data?: {segments: Segment[]};
-};
-
-export const ShortVideo: React.FC<Props> = (props) => {
+export const ShortVideo: React.FC<RenderProps> = (props) => {
   const frame = useCurrentFrame();
-  const {fps} = useVideoConfig();
+  const {fps, durationInFrames} = useVideoConfig();
   const time = frame / fps;
   const accent = props.brand.accent;
   const current = props.transcript_data?.segments.find(
@@ -34,19 +26,21 @@ export const ShortVideo: React.FC<Props> = (props) => {
     (word) => time >= word.start && time <= word.end,
   );
   const scale = spring({frame, fps, config: {damping: 14}});
-  const progress = interpolate(frame, [0, 45], [0, 1], {
+  const progress = interpolate(frame, [0, Math.max(1, durationInFrames - 1)], [0, 1], {
     extrapolateLeft: "clamp",
     extrapolateRight: "clamp",
   });
 
   return (
     <AbsoluteFill style={{backgroundColor: "#111827", fontFamily: props.brand.font_family}}>
-      <Video src={props.source} style={{width: "100%", height: "100%", objectFit: "cover"}} />
+      {props.source ? (
+        <OffthreadVideo src={asset(props.source)} style={{width: "100%", height: "100%", objectFit: "cover"}} />
+      ) : null}
       <AbsoluteFill style={{background: "linear-gradient(180deg, rgba(0,0,0,.35), transparent 35%, rgba(0,0,0,.78))"}} />
 
       <div style={{position: "absolute", top: 72, left: 60, right: 60, display: "flex", alignItems: "center", gap: 20}}>
         {props.brand.logo_path ? (
-          <img src={props.brand.logo_path} style={{width: 76, height: 76, objectFit: "contain"}} />
+          <Img src={asset(props.brand.logo_path)} style={{width: 76, height: 76, objectFit: "contain"}} />
         ) : null}
         {props.brand.watermark ? (
           <span style={{color: props.brand.text_color, fontSize: 34, fontWeight: 800}}>
@@ -73,8 +67,6 @@ export const ShortVideo: React.FC<Props> = (props) => {
       <div style={{position: "absolute", bottom: 90, left: 54, right: 54, height: 8, background: "rgba(255,255,255,.3)", borderRadius: 99}}>
         <div style={{width: `${progress * 100}%`, height: "100%", background: accent, borderRadius: 99}} />
       </div>
-
-      {props.music ? <Audio src={props.music} volume={0.2} /> : null}
     </AbsoluteFill>
   );
 };
