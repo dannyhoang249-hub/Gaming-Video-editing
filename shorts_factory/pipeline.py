@@ -60,9 +60,12 @@ def _get_transcript(config: PipelineConfig, path: Path, user_supplied: bool) -> 
         return load_transcript(path)
     if path.exists():
         cached = load_transcript(path)
-        if Path(cached.source).resolve() == config.input.resolve():
+        if Path(cached.source).resolve() != config.input.resolve():
+            print(f"warning: {path} belongs to {cached.source}, transcribing again", file=sys.stderr)
+        elif config.input.stat().st_mtime > path.stat().st_mtime:
+            print(f"warning: {config.input} changed after {path}, transcribing again", file=sys.stderr)
+        else:
             return cached
-        print(f"warning: {path} belongs to {cached.source}, transcribing again", file=sys.stderr)
     transcript = transcribe(config.input, config.model, config.language)
     save_transcript(transcript, path)
     return transcript
@@ -81,7 +84,7 @@ def write_render_manifest(
     # lives next to the source video and is referenced by file name.
     brand = config.brand.model_dump(mode="json")
     logo = brand["logo_path"]
-    if logo and not logo.startswith(("http://", "https://")):
+    if logo and not _is_url(logo):
         copied = source_video.parent / f"logo{Path(logo).suffix}"
         shutil.copyfile(logo, copied)
         brand["logo_path"] = copied.name
@@ -103,13 +106,29 @@ def write_render_manifest(
     return manifest
 
 
+def _is_url(path: str) -> bool:
+    return path.startswith(("http://", "https://"))
+
+
+def _check_inputs(config: PipelineConfig, render: bool) -> None:
+    """Fail before the slow steps, not after them."""
+    if not config.input.is_file():
+        raise FileNotFoundError(f"Input video not found: {config.input}")
+    if config.music_path and not config.music_path.is_file():
+        raise FileNotFoundError(f"Music file not found: {config.music_path}")
+    logo = config.brand.logo_path
+    if logo and not _is_url(logo) and not Path(logo).is_file():
+        raise FileNotFoundError(f"Logo file not found: {logo}")
+    if render and not shutil.which("npx"):
+        raise RuntimeError("npx is required for --render. Install Node.js 20 or newer.")
+
+
 def run_pipeline(
     config: PipelineConfig,
     transcript_path: Path | None = None,
     render: bool = False,
 ) -> dict[str, object]:
-    if not config.input.exists():
-        raise FileNotFoundError(f"Input video not found: {config.input}")
+    _check_inputs(config, render)
     config.output_dir.mkdir(parents=True, exist_ok=True)
 
     transcript_file = transcript_path or config.output_dir / "transcript.json"
@@ -148,7 +167,8 @@ def run_pipeline(
         rendered = config.output_dir / "short.mp4"
         subprocess.run(
             [
-                "npx", "remotion", "render", "src/index.tsx", "ShortVideo",
+                # Full path: on Windows npx is npx.cmd, which the bare name does not find.
+                shutil.which("npx"), "remotion", "render", "src/index.tsx", "ShortVideo",
                 str(rendered.resolve()),
                 f"--props={manifest.resolve()}",
                 f"--public-dir={vertical.parent.resolve()}",

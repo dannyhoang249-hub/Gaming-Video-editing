@@ -69,6 +69,8 @@ cp config.example.yml config.yml
 shorts media/gameplay.mp4 --config config.yml --render
 ```
 
+Unknown options are rejected, and `min_clip_seconds` cannot exceed `max_clip_seconds`.
+
 | Option | Default | Description |
 |---|---|---|
 | `input` | required | Source video; can be given on the command line instead |
@@ -107,7 +109,7 @@ flowchart TD
     I --> J[Remotion render]
 ```
 
-**Transcript.** Saved to `<output_dir>/transcript.json` and reused for the same source video. Delete it after changing `model` or `language`. A file passed with `--transcript` is never rewritten.
+**Transcript.** Saved to `<output_dir>/transcript.json` and reused for the same source video until that file changes. Delete it after changing `model` or `language`. A file passed with `--transcript` is never rewritten.
 
 **AI selection.** Long transcripts are sent in several requests, and one failed request does not discard the others. Each returned clip is validated, moved to nearby sentence boundaries and kept within the length limits. If AI selection yields nothing usable, the heuristic takes over.
 
