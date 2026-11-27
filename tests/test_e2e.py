@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from shorts_factory.ffmpeg import concat_clips, cut_clip, has_audio, loudness_per_second
+from shorts_factory.ffmpeg import concat_clips, cut_clip, has_audio, loudness_per_second, media_duration
 from shorts_factory.models import Clip, PipelineConfig
 from shorts_factory.pipeline import run_pipeline
 
@@ -83,6 +83,8 @@ def test_cut_clips_are_resized_and_join_to_the_expected_length(tmp_path: Path):
     video = next(stream for stream in info["streams"] if "width" in stream)
     assert (video["width"], video["height"]) == (1920, 1080)
     assert float(info["format"]["duration"]) == pytest.approx(6, abs=0.2)
+    # Captions are placed using these lengths, so they must add up to the joined video.
+    assert sum(map(media_duration, clips)) == pytest.approx(float(info["format"]["duration"]), abs=0.05)
 
 
 def mean_volume(path: Path) -> float:

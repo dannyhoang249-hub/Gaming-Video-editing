@@ -65,6 +65,23 @@ def has_audio(source: Path) -> bool:
     return bool(result.stdout.strip())
 
 
+def media_duration(source: Path) -> float:
+    """Length of a media file in seconds."""
+    try:
+        result = subprocess.run(
+            [
+                "ffprobe", "-v", "error", "-show_entries", "format=duration",
+                "-of", "csv=p=0", str(source),
+            ],
+            check=True, capture_output=True, text=True,
+        )
+        return float(result.stdout.strip())
+    except subprocess.CalledProcessError as exc:
+        raise FFmpegError(exc.stderr[-2000:]) from exc
+    except ValueError as exc:
+        raise FFmpegError(f"Cannot read the duration of {source}") from exc
+
+
 def frame_rate(source: Path) -> float:
     """Average frames per second, capped at 60; 30 when the file does not say."""
     try:

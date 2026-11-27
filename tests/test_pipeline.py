@@ -34,6 +34,13 @@ def test_timeline_remaps_clips_back_to_back():
     assert result.segments[1].words[0].start == 10
 
 
+def test_timeline_offsets_follow_the_real_file_lengths():
+    clips = [Clip(id="1", start=10, end=20), Clip(id="2", start=50, end=60)]
+    result = _timeline_transcript(make_transcript(), clips, lengths=[10.25, 10.5])
+    assert result.segments[1].words[0].start == 10.25
+    assert result.duration == 20.75
+
+
 def test_timeline_clamps_segment_partly_inside_clip():
     clips = [Clip(id="1", start=15, end=18)]
     result = _timeline_transcript(make_transcript(), clips)

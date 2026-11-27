@@ -12,6 +12,7 @@ from .ffmpeg import (
     cut_clip,
     frame_rate,
     loudness_per_second,
+    media_duration,
 )
 from .models import Clip, PipelineConfig, Transcript, TranscriptSegment, Word
 from .selector import select_highlights
@@ -20,12 +21,18 @@ from .transcriber import load_transcript, save_transcript, transcribe
 REMOTION_DIR = Path(__file__).resolve().parent.parent / "remotion"
 
 
-def _timeline_transcript(transcript: Transcript, clips: list[Clip]) -> Transcript:
-    """Map source timestamps onto the concatenated clip timeline."""
+def _timeline_transcript(
+    transcript: Transcript, clips: list[Clip], lengths: list[float] | None = None
+) -> Transcript:
+    """Map source timestamps onto the concatenated clip timeline.
+
+    `lengths` are the real durations of the cut files, which are rounded to whole
+    frames and so differ slightly from the requested clip durations.
+    """
     mapped_segments: list[TranscriptSegment] = []
     timeline_offset = 0.0
 
-    for clip in clips:
+    for clip, length in zip(clips, lengths or [clip.duration for clip in clips], strict=True):
         for segment in transcript.segments:
             start = max(segment.start, clip.start)
             end = min(segment.end, clip.end)
@@ -50,7 +57,7 @@ def _timeline_transcript(transcript: Transcript, clips: list[Clip]) -> Transcrip
                     words=mapped_words,
                 )
             )
-        timeline_offset += clip.duration
+        timeline_offset += length
 
     return Transcript(
         source=transcript.source,
@@ -84,8 +91,9 @@ def write_render_manifest(
     transcript_path: Path,
     source_video: Path,
     fps: float = 30.0,
+    lengths: list[float] | None = None,
 ) -> Path:
-    timeline_transcript = _timeline_transcript(transcript, clips)
+    timeline_transcript = _timeline_transcript(transcript, clips, lengths)
     manifest = config.output_dir / "render-manifest.json"
     # Remotion's browser can only load files from its public dir, so every asset
     # lives next to the source video and is referenced by file name.
@@ -167,7 +175,9 @@ def run_pipeline(
     vertical = config.output_dir / "public" / "vertical-source.mp4"
     concat_clips(clip_files, vertical, config.music_path)
     manifest = write_render_manifest(
-        config, clips, transcript, transcript_file, vertical, fps=frame_rate(vertical)
+        config, clips, transcript, transcript_file, vertical,
+        fps=frame_rate(vertical),
+        lengths=[media_duration(path) for path in clip_files],
     )
 
     rendered: Path | None = None
